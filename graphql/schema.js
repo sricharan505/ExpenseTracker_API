@@ -63,15 +63,23 @@ module.exports = buildSchema(`
         isloggedin: Boolean!
     }
 
+    type totaldata{expense:String,income:String,investment:String}
+
     type RootQuery{
         login(email:String!,password:String!):loggeduser
         getType(type:String!) : typedata
         getCategories(type : String!): [category]
         getEntries(conditions:getentries):[entryout]
+        getTotals : totaldata
     }
 
     type RootMutation{
         addCategory(type : String!, category : postcategory): Boolean
+        editCategory(type:String!,oldcategory:String!,newcategory:String!): Boolean
+        deleteCategory(type:String!,category:String!):Boolean
+        addSubcategory(type: String!, category: String!, subcategory: String!): Boolean
+        editSubcategory(type:String!,category: String!,oldsubcategory:String!,newsubcategory:String!): Boolean
+        deleteSubcategory(type:String!,category:String!,subcategory:String!): Boolean
         addEntry(entry:entry!): Boolean
         deleteEntry(id: String!): Boolean
         editEntry(entry:editentry!) : Boolean

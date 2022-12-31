@@ -14,10 +14,7 @@ const userSchema = new schema({
             subcategories:
             [String]
         }],
-        entries:[ {
-            type:ObjectId,
-            ref: 'Entry'
-        }]
+        total:{type: Number,default:0}
     },
     income:{
         categories: [
@@ -26,10 +23,7 @@ const userSchema = new schema({
             subcategories:
             [String]
         }],
-        entries:[ {
-            type:ObjectId,
-            ref: 'Entry'
-        }]
+        total:{type: Number,default:0}
     },
     investment: {
         categories: [
@@ -38,10 +32,7 @@ const userSchema = new schema({
             subcategories:
             [String]
         }],
-        entries:[ {
-            type:ObjectId,
-            ref: 'Entry'
-        }]
+        total:{type: Number,default:0}
     }
 });
 

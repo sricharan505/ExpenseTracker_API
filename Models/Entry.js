@@ -1,4 +1,4 @@
-const { Decimal128 } = require('mongodb');
+const { ObjectId } = require('mongodb');
 const mongoose = require('mongoose');
 const schema = mongoose.Schema;
 
@@ -8,7 +8,8 @@ const entrySchema = new schema({
     category: {type: String, required:true},
     subcategory: {type: String},
     desc: {type:String},
-    date:{type:Number, required:true}
+    date:{type:Number, required:true},
+    userid: {type:ObjectId,ref: 'User'}
 });
 
 module.exports = mongoose.model("Entry", entrySchema);

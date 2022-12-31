@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const User = require('../Models/User');
 const Entry = require("../Models/Entry");
 const { Decimal128 } = require('mongodb');
+const { isType } = require('graphql');
 
 function hasDuplicates(array) {
     var valuesSoFar = Object.create(null);
@@ -105,7 +106,7 @@ module.exports = {
         return  user[type].categories;
     },
 
-    // Add categories
+    // Add category
     addCategory: async ({type,category},req) => {
         // console.log(category.categoryname, category.subcategories);
 
@@ -114,6 +115,13 @@ module.exports = {
         if(!user)
         {
             const error = new Error('User not found!');
+            throw error;
+        }
+
+        //check if category not present or empty
+        console.log(category.categoryname);
+        if (category.categoryname === "") {
+            const error = new Error("Category cannot be empty");
             throw error;
         }
 
@@ -164,6 +172,305 @@ module.exports = {
         return true;
     },
 
+    // Edit category
+    editCategory: async ({type,oldcategory,newcategory},req) => {
+
+        // Find the user
+        const user = await User.findById(req.userId);
+        if(!user)
+        {
+            const error = new Error('User not found!');
+            throw error;
+        }
+
+        //check the type
+        if(!(type==='expense' || type==='income' || type==='investment'))
+        {
+            const error = new Error("Invalid type");
+            throw error;
+        }
+        
+        // Check if newcategory is already present
+        user[type].categories.map((c)=>{
+            if(c.category === newcategory)
+            {
+                const error = new Error('newcategory already present');
+                throw error;
+            }
+        })
+
+        // Check if oldcategory is present 
+        // and Rename oldcategory to newcategory in user
+        let iscategory = false;
+        user[type].categories.map((c)=>{
+            if(c.category === oldcategory)
+            {
+                c.category = newcategory;
+                iscategory = true;
+            }
+        })
+        if(!iscategory)
+        {
+            const error = new Error("Category not found!");
+            throw error;
+        }
+        await user.save()
+        
+        // Rename oldcategory to newcategory in entries
+        await Entry.updateMany(
+            { type:type, category:oldcategory, userid:req.userId },
+            { category: newcategory }
+        );
+        
+        return true;
+    },
+
+    // Delete category
+    deleteCategory: async ({type,category},req) => {
+
+        // Find the user
+        const user = await User.findById(req.userId);
+        if(!user)
+        {
+            const error = new Error('User not found!');
+            throw error;
+        }
+
+        //check the type
+        if(!(type==='expense' || type==='income' || type==='investment'))
+        {
+            const error = new Error("Invalid type");
+            throw error;
+        }
+
+        // Check if category is present
+        // and delete category from user
+        let iscategory = false;
+        user[type].categories = user[type].categories.filter((c) => {
+            if (c.category === category) {
+                iscategory = true;
+                return false;
+            }
+            return true;
+        });
+        if(!iscategory)
+        {
+            const error = new Error("Category not found!");
+            throw error;
+        }
+
+        // Save user
+        await user.save();
+
+        // delete entries with category
+        await Entry.deleteMany({
+            type:type,
+            category: category,
+            userid:req.userId
+        });  
+        
+        return true;
+    },
+
+    // Add subcategory
+    addSubcategory: async ({type,category,subcategory},req) => {
+
+        // check if subcategory is empty
+        if(subcategory === "")
+        {
+            const error = new Error("subcategory cannot be empty");
+            throw error;
+        }
+
+        // Find the user
+        const user = await User.findById(req.userId);
+        if(!user)
+        {
+            const error = new Error('User not found!');
+            throw error;
+        }
+
+        //check the type
+        if(!(type==='expense' || type==='income' || type==='investment'))
+        {
+            const error = new Error("Invalid type");
+            throw error;
+        }
+
+        // check if category exists
+        let usercategory = null;
+        user[type].categories.map((c)=>{
+            if(c.category===category)
+            {
+                usercategory = c;
+            }
+        })
+        if(usercategory === null)
+        {
+            const error = new Error("Category not found");
+            throw error;
+        }
+
+        //check if subcategory already exists
+        usercategory.subcategories.map((s)=>{
+            if(s===subcategory)
+            {
+                const error = new Error("Subcategory already present");
+                throw error;
+            }
+        })
+
+        //check if max no of subcategories are present
+        if(usercategory.subcategories.length === 5)
+        {
+            const error = new Error("Max no of subcategories allowed is 5");
+            throw error;
+        }
+
+        // If category already has entries without subcategories, deny adding subcategory.
+        if(usercategory.subcategories.length === 0)
+        {
+            let isentry = null;
+            isentry = await Entry.findOne({type:type,category:category,userid:req.userId})
+            if(isentry !== null)
+            {
+                const error = new Error("Entries without subcategory found");
+                throw error;
+            }
+        }
+
+        // add the subcategory and save
+        usercategory.subcategories.push(subcategory);
+        await user.save();
+
+        return true;
+    },
+
+    // Edit subcategory
+    editSubcategory: async ({type,category,oldsubcategory,newsubcategory},req) => {
+        
+        // Find the user
+        const user = await User.findById(req.userId);
+        if(!user)
+        {
+            const error = new Error('User not found!');
+            throw error;
+        }
+
+        //check the type
+        if(!(type==='expense' || type==='income' || type==='investment'))
+        {
+            const error = new Error("Invalid type");
+            throw error;
+        }
+
+        // check if category is present
+        let usercategory = null;
+        user[type].categories.map((c)=>{
+            if(c.category===category)
+            {
+                usercategory = c;
+            }
+        })
+        if(usercategory === null)
+        {
+            const error = new Error("Category not found");
+            throw error;
+        }
+
+        // Check if newsubcategory is already present
+        usercategory.subcategories.map(s=>{
+            if(s===newsubcategory)
+            {
+                const error = new Error("newsubcategory already present");
+                throw error;
+            }
+        })
+        
+        // Check if oldsubcategory is present
+        // and Rename oldsubcategory to newsubcategory in user
+        let ispresent = false;
+        usercategory.subcategories.forEach((s,i)=>{
+            if(s===oldsubcategory)
+            {
+                ispresent = true;
+                usercategory.subcategories[i] = newsubcategory;
+            }
+        })
+        if(!ispresent)
+        {
+            const error = new Error("oldsubcategory not found");
+            throw error;
+        }
+        await user.save();
+        
+        // Rename oldsubcategory to newsubcategory in entries
+        await Entry.updateMany(
+            { type:type, category:category,subcategory:oldsubcategory,userid:req.userId },
+            { subcategory:newsubcategory }
+        );
+
+        return true;
+    },
+
+    // Delete subcategory
+    deleteSubcategory: async ({type,category,subcategory},req) => {
+
+        // Find the user
+        const user = await User.findById(req.userId);
+        if(!user)
+        {
+            const error = new Error('User not found!');
+            throw error;
+        }
+
+        //check the type
+        if(!(type==='expense' || type==='income' || type==='investment'))
+        {
+            const error = new Error("Invalid type");
+            throw error;
+        }
+
+        // check if category is present
+        let usercategory = null;
+        user[type].categories.map((c)=>{
+            if(c.category===category)
+            {
+                usercategory = c;
+            }
+        })
+        if(usercategory === null)
+        {
+            const error = new Error("Category not found");
+            throw error;
+        }
+        
+        // Check if subcategory is present
+        // and Delete subcategory in user
+        let ispresent = false;
+        usercategory.subcategories = usercategory.subcategories.filter((s) => {
+            if (s === subcategory) 
+            {
+                ispresent = true;
+                return false;
+            }
+            return true;
+        });
+        if(!ispresent)
+        {
+            const error = new Error("subcategory not found");
+            throw error;
+        }
+        await user.save();
+        
+        // Rename oldsubcategory to newsubcategory in entries
+        await Entry.deleteMany(
+            { type:type, category:category,subcategory:subcategory,userid:req.userId }
+        );
+
+        return true;
+    },
+
     // Get entries
     getEntries: async ({conditions},req) => {
 
@@ -202,6 +509,7 @@ module.exports = {
             const error = new Error("wrong type");
             throw error;
         }
+        let istype = true;
         
         //check if category is present
         const category = conditions.category;
@@ -251,60 +559,153 @@ module.exports = {
         // provide data when start time and end time is provided
         if(isstartdate && isenddate)
         {   
-            await Promise.all(user[type].entries.map(async (e) => {
-            const entry = await Entry.find({
-                $and:[{_id:e},
-                {date:{$lte:enddate}},
-                {date:{$gte:startdate}}]
-            },{__v:0});
-            //console.log(entry);
-            entry[0] && out.push(entry[0]);
-            }));
+            if(istype)
+            {
+                if(iscategory)
+                {
+                    if(issubcategory)
+                    {
+                        out = await Entry.find({
+                            $and:[
+                                {date:{$lte:enddate}},
+                                {date:{$gte:startdate}},
+                                {type:type},
+                                {category:category},
+                                {subcategory:subcategory},
+                                {userid:req.userId}
+                            ]
+                        },{__v:0,userid:0});
+                    }
+                    else
+                    {
+                        out = await Entry.find({
+                            $and:[
+                                {date:{$lte:enddate}},
+                                {date:{$gte:startdate}},
+                                {type:type},
+                                {category:category},
+                                {userid:req.userId}
+                            ]
+                        },{__v:0,userid:0});
+                    }
+                }
+                else
+                {
+                    out = await Entry.find({
+                            $and:[
+                                {date:{$lte:enddate}},
+                                {date:{$gte:startdate}},
+                                {type:type},
+                                {userid:req.userId}
+                            ]
+                        },{__v:0,userid:0});
+                }
+            }
+            else
+            {
+                out = await Entry.find({
+                            $and:[
+                                {date:{$lte:enddate}},
+                                {date:{$gte:startdate}},
+                                {userid:req.userId}
+                            ]
+                        },{__v:0,userid:0});
+            }
         }
         // provide data when start time or end time is provided
         else if(isstartdate || isenddate)
         {
-            const pdate = isstartdate?startdate:enddate;
-            
-            await Promise.all(user[type].entries.map(async (e) => {
-            const entry = await Entry.find({
-                $and:[{"_id":e},{"date":pdate}]
-            },{__v:0});
-            //console.log("single ",entry);
-            entry[0] && out.push(entry[0]);
-            }));
+            if(istype)
+            {
+                if(iscategory)
+                {
+                    if(issubcategory)
+                    {
+                        out = await Entry.find({
+                            $and:[
+                                {date:startdate},
+                                {type:type},
+                                {category:category},
+                                {subcategory:subcategory},
+                                {userid:req.userId}
+                            ]
+                        },{__v:0,userid:0});
+                    }
+                    else
+                    {
+                        out = await Entry.find({
+                            $and:[
+                                {date:startdate},
+                                {type:type},
+                                {category:category},
+                                {userid:req.userId}
+                            ]
+                        },{__v:0,userid:0});
+                    }
+                }
+                else
+                {
+                    out = await Entry.find({
+                            $and:[
+                                {date:startdate},
+                                {type:type},
+                                {userid:req.userId}
+                            ]
+                        },{__v:0,userid:0});
+                }
+            }
+            else
+            {
+                out = await Entry.find({
+                    $and:[{userid:req.userId},{"date":pdate}]
+                },{__v:0,userid:0});
+            }
         }
         // If both dates are not provided, fetch all.
         else 
         {
-            await Promise.all(user[type].entries.map(async (e) => {
-            const entry = await Entry.findById(e,{__v:0});
-            //console.log(entry);
-            out.push(entry);
-            }));
-        }
-
-        // Filter category if present
-        if(iscategory)
-        {
-            out = out.filter((e)=>{
-                // filter subcategory if present
-                if(issubcategory && e.category === category && e.subcategory === subcategory)
-                {   
-                    return true;
-                }
-                else if( !issubcategory && e.category === category)
+            if(istype)
+            {
+                if(iscategory)
                 {
-                    return true;
+                    if(issubcategory)
+                    {
+                        out = await Entry.find({
+                            $and:[
+                                {type:type},
+                                {category:category},
+                                {subcategory:subcategory},
+                                {userid:req.userId}
+                            ]
+                        },{__v:0,userid:0});
+                    }
+                    else
+                    {
+                        out = await Entry.find({
+                            $and:[
+                                {type:type},
+                                {category:category},
+                                {userid:req.userId}
+                            ]
+                        },{__v:0,userid:0});
+                    }
                 }
                 else
                 {
-                    return false;
+                    out = await Entry.find({
+                            $and:[
+                                {type:type},
+                                {userid:req.userId}
+                            ]
+                        },{__v:0,userid:0});
                 }
-            });  
+            }
+            else
+            {
+                out = await Entry.find({userid:req.userId}, { __v: 0, userid: 0 });
+            }
         }
-
-        //console.log(out);
+        
         return out;
     },
 
@@ -385,7 +786,8 @@ module.exports = {
                 category:category,
                 subcategory:subcategory,
                 desc:desc,
-                date:date
+                date:date,
+                userid:req.userId
             });
         }
         else
@@ -395,13 +797,12 @@ module.exports = {
                 type:type,
                 category:category,
                 desc:desc,
-                date:date
+                date:date,
+                userid:req.userId
             });
         }
-        
-
-        const savedentry = await newentry.save();
-        user[type].entries.push(savedentry);
+        user[type].total = user[type].total + value;
+        await newentry.save();
         await user.save();
 
         return true;
@@ -416,14 +817,13 @@ module.exports = {
             throw error;
         }
 
-        const response = await Entry.findByIdAndRemove(id).clone().catch((err) => {
-            const error = new Error("Some Error occured");
-            throw error;
-        });
-
-        if (response == null)
+        const entry = await Entry.findById(id);
+        const response = await Entry.deleteOne({_id:id,userid:req.userId})
+        //console.log(response);
+        if (response.deletedCount === 0)
             return false;
-
+        user[entry.type].total -= entry.value;
+        user.save();
         return true;
     },
 
@@ -435,15 +835,30 @@ module.exports = {
             const error = new Error('User not found');
             throw error;
         }
-        // console.log(user);
-        // console.log(entry);
-
+        
+        // See if ID is present
         const id = entry.id;
         if(!id)
         {
             const error = new Error("ID required");
             throw error;
         }
+
+        const searchentry = await Entry.findById(id);
+        if(searchentry === null)
+        {
+            const error = new Error("Entry not found");
+            throw error;
+        }
+        
+        // If entry was not created by user, deny permission
+        if(searchentry.userid.valueOf() !== req.userId)
+        {
+            //console.log(searchentry.userid.valueOf(), req.userId);
+            const error = new Error("Permission denied");
+            throw error;
+        }
+
 
         const value = parseFloat(entry.value);
         if(isNaN(value))
@@ -456,22 +871,6 @@ module.exports = {
         if(!user[type])
         {
             const error = new Error("wrong type");
-            throw error;
-        }
-
-        // check if the entry was created by the user editing it
-        let containsid = false;
-        for(enid in user[type].entries)
-        {
-            //console.log(user[type].entries[enid].valueOf(), id);
-            if(user[type].entries[enid].valueOf() === id)
-            {
-                containsid = true;
-            }
-        }
-        if(!containsid)
-        {
-            const error = new Error("entry not created by user");
             throw error;
         }
         
@@ -513,10 +912,9 @@ module.exports = {
         const desc = entry.desc;
         const date = entry.date;
 
-        let modentry;
         if(subcategory)
         {
-            modentry = await Entry.findByIdAndUpdate(id, { 
+            await Entry.findByIdAndUpdate(id, { 
                 value:value,
                 category:category,
                 subcategory: subcategory,
@@ -526,18 +924,44 @@ module.exports = {
         }
         else
         {
-            modentry = await Entry.findByIdAndUpdate(id, { 
+            await Entry.findByIdAndUpdate(id, { 
                 value:value,
                 category:category,
                 desc: desc,
                 date:date
             })
         }
+        const oldentry = searchentry.value;
+        if (oldentry > value)
+        {
+            user[type].total = user[type].total - (oldentry - value);           
+        } 
+        else if (oldentry < value)
+        {
+            user[type].total = user[type].total + (value - oldentry);
+        }
         
-
-        const savedentry = await modentry.save();
-        
+        await user.save();
         return true;
     },
+
+    //get totals of all types
+    getTotals: async ({},req)=>{
+
+        // get the user
+        const user = await User.findById(req.userId);
+        //console.log(req.userId);
+        if(!user)
+        {
+            const error = new Error('User not found');
+            throw error;
+        }
+        //console.log("totals");
+        return {
+            expense: user.expense.total,
+            income: user.income.total,
+            investment: user.investment.total,
+        };
+    }
 }
 
