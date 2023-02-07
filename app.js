@@ -33,6 +33,15 @@ app.use((req, res, next) => {
 // Auth JWT
 app.use(auth);
 
+// Just Verify JWT
+app.get('/verifyjwt',auth,(req,res,next)=>{ 
+    //console.log(req.isAuth);
+    if(req.isAuth === true) 
+        return(res.status(200).json({isloggedin: true}));
+    else
+        return(res.status(200).json({isloggedin: false}));
+    })
+
 //Graphql
 app.use(
     '/graphql',
